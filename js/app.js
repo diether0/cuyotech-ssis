@@ -16,10 +16,10 @@
     ],
     users: [
       { user_id: 1, username: "maria.santos", password: "1234", role: "student", name: "Maria Santos" },
-      { user_id: 2, username: "reg.juarez", password: "1234", role: "registrar", name: "Ana Juarez" },
-      { user_id: 3, username: "cash.delacruz", password: "1234", role: "cashier", name: "Ramon Dela Cruz" },
-      { user_id: 4, username: "dept.reyes", password: "1234", role: "department", name: "Elena Reyes" },
-      { user_id: 5, username: "admin.root", password: "1234", role: "admin", name: "System Admin" }
+      { user_id: 2, username: "registrar", password: "1234", role: "registrar", name: "Ana Juarez" },
+      { user_id: 3, username: "cashier", password: "1234", role: "cashier", name: "Ramon Dela Cruz" },
+      { user_id: 4, username: "department", password: "1234", role: "department", name: "Elena Reyes" },
+      { user_id: 5, username: "admin", password: "1234", role: "admin", name: "System Admin" }
     ],
     students: [
       { student_id: "2024-00123", user_id: 1, full_name: "Maria Santos", program: "BS Computer Science", year_level: 3, email: "maria.santos@cuyotech.edu.ph" }
@@ -51,17 +51,49 @@
       { clearance_id: 3, student_id: "2024-00123", dept: "College of Business", status: "cleared", date_signed: "2026-05-29" }
     ],
     audit_logs: [
-      { id: 1, actor: "admin.root", action: "Created user account: cash.delacruz", date: "2026-08-01 09:12" },
-      { id: 2, actor: "reg.juarez", action: "Encoded grades for CS301", date: "2026-09-30 14:40" }
+      { id: 1, actor: "admin", action: "Created user account: cashier", date: "2026-08-01 09:12" },
+      { id: 2, actor: "registrar", action: "Encoded grades for CS301", date: "2026-09-30 14:40" }
     ]
   };
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
+  function migrateDemoUsernames(data) {
+    var renames = {
+      "reg.juarez": "registrar",
+      "cash.delacruz": "cashier",
+      "dept.reyes": "department",
+      "admin.root": "admin"
+    };
+    var changed = false;
+    Object.keys(renames).forEach(function (oldName) {
+      var user = data.users.filter(function (item) { return item.username === oldName; })[0];
+      var newName = renames[oldName];
+      if (user && !data.users.some(function (item) { return item.username === newName; })) {
+        user.username = newName;
+        changed = true;
+        data.audit_logs.forEach(function (log) {
+          if (log.actor === oldName) log.actor = newName;
+          log.action = log.action.replace(oldName, newName);
+        });
+        var currentSession = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+        if (currentSession && currentSession.user_id === user.user_id) {
+          currentSession.username = newName;
+          localStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
+        }
+      }
+    });
+    return changed;
+  }
+
   function db() {
     var raw = localStorage.getItem(DB_KEY);
     if (!raw) { localStorage.setItem(DB_KEY, JSON.stringify(SEED)); return clone(SEED); }
-    try { return JSON.parse(raw); } catch (e) { localStorage.setItem(DB_KEY, JSON.stringify(SEED)); return clone(SEED); }
+    try {
+      var data = JSON.parse(raw);
+      if (migrateDemoUsernames(data)) save(data);
+      return data;
+    } catch (e) { localStorage.setItem(DB_KEY, JSON.stringify(SEED)); return clone(SEED); }
   }
   function save(data) { localStorage.setItem(DB_KEY, JSON.stringify(data)); }
   function reset() { localStorage.setItem(DB_KEY, JSON.stringify(SEED)); localStorage.removeItem(SESSION_KEY); }
