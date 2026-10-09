@@ -16,10 +16,10 @@
     ],
     users: [
       { user_id: 1, username: "maria.santos", password: "1234", role: "student", name: "Maria Santos" },
-      { user_id: 2, username: "reg.juarez", password: "1234", role: "registrar", name: "Ana Juarez" },
-      { user_id: 3, username: "cash.delacruz", password: "1234", role: "cashier", name: "Ramon Dela Cruz" },
-      { user_id: 4, username: "dept.reyes", password: "1234", role: "department", name: "Elena Reyes" },
-      { user_id: 5, username: "admin.root", password: "1234", role: "admin", name: "System Admin" }
+      { user_id: 2, username: "registrar", password: "1234", role: "registrar", name: "Ana Juarez" },
+      { user_id: 3, username: "cashier", password: "1234", role: "cashier", name: "Ramon Dela Cruz" },
+      { user_id: 4, username: "department", password: "1234", role: "department", name: "Elena Reyes" },
+      { user_id: 5, username: "admin", password: "1234", role: "admin", name: "System Admin" }
     ],
     students: [
       { student_id: "2024-00123", user_id: 1, full_name: "Maria Santos", program: "BS Computer Science", year_level: 3, email: "maria.santos@cuyotech.edu.ph" }
@@ -62,8 +62,35 @@
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
-  function normalizeData(data) {
+  function migrateDemoUsernames(data) {
+    var renames = {
+      "reg.juarez": "registrar",
+      "cash.delacruz": "cashier",
+      "dept.reyes": "department",
+      "admin.root": "admin"
+    };
     var changed = false;
+    Object.keys(renames).forEach(function (oldName) {
+      var user = data.users.filter(function (item) { return item.username === oldName; })[0];
+      var newName = renames[oldName];
+      if (!user || data.users.some(function (item) { return item.username === newName; })) return;
+      user.username = newName;
+      changed = true;
+      data.audit_logs.forEach(function (entry) {
+        if (entry.actor === oldName) entry.actor = newName;
+        entry.action = entry.action.replace(oldName, newName);
+      });
+      var currentSession = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+      if (currentSession && String(currentSession.user_id) === String(user.user_id)) {
+        currentSession.username = newName;
+        localStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
+      }
+    });
+    return changed;
+  }
+
+  function normalizeData(data) {
+    var changed = migrateDemoUsernames(data);
     if (!Array.isArray(data.course_offerings)) {
       data.course_offerings = clone(SEED.course_offerings);
       changed = true;
