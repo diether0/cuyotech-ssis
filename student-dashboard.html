@@ -37,6 +37,7 @@
     <div class="main">
       <h1 class="page-title">Welcome back, <span id="firstName">Student</span>!</h1>
       <p class="page-sub">Here is an overview of your academic records for 1st Semester, A.Y. 2026-2027.</p>
+      <div id="alert" class="alert ok"></div>
 
       <div class="grid cols-4">
         <div class="card stat"><div class="label">GPA</div><div class="value" id="gpa">-</div></div>
@@ -63,6 +64,14 @@
         <table>
           <thead><tr><th>Code</th><th>Subject</th><th>Units</th><th>Department</th><th>Enrollment</th></tr></thead>
           <tbody id="subjectsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="card section-card" id="openSubjects">
+        <h3>Subjects Open for Enrollment</h3>
+        <table>
+          <thead><tr><th>Code</th><th>Subject</th><th>Units</th><th>Term</th><th>Action</th></tr></thead>
+          <tbody id="openSubjectsBody"></tbody>
         </table>
       </div>
 
@@ -110,6 +119,36 @@
     }).join("");
 
     var enrolls = d.enrollments.filter(function (e) { return e.student_id === sid; });
+    function renderOpenSubjects() {
+      var openOfferings = d.course_offerings.filter(function (offering) { return offering.status === "open"; });
+      var offeringRows = openOfferings.map(function (offering) {
+        var course = SSIS.byId(d.courses, "course_id", offering.course_id);
+        if (!course) return "";
+        var enrollment = enrolls.filter(function (item) {
+          return String(item.course_id) === String(offering.course_id) && item.term === offering.term &&
+            item.school_year === offering.school_year && item.status !== "rejected";
+        })[0];
+        var action = enrollment ? SSIS.badge(enrollment.status) :
+          '<button class="btn small" data-enroll-offering="' + offering.offering_id + '">Enroll</button>';
+        return '<tr><td>' + SSIS.esc(course.course_code) + '</td><td>' + SSIS.esc(course.title) + '</td><td>' + course.units +
+          '</td><td>' + SSIS.esc(offering.term + " " + offering.school_year) + '</td><td>' + action + '</td></tr>';
+      }).join("");
+      document.getElementById("openSubjectsBody").innerHTML = offeringRows || '<tr><td colspan="5" class="hint">No subjects are open right now.</td></tr>';
+      document.querySelectorAll("[data-enroll-offering]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          var result = SSIS.enrollInOffering(sid, button.getAttribute("data-enroll-offering"));
+          var alert = document.getElementById("alert");
+          alert.className = result.error ? "alert error show" : "alert ok show";
+          alert.textContent = result.error || "Enrollment request submitted for registrar approval.";
+          if (!result.error) {
+            var offering = SSIS.byId(d.course_offerings, "offering_id", button.getAttribute("data-enroll-offering"));
+            enrolls.push({ student_id: sid, course_id: offering.course_id, term: offering.term, school_year: offering.school_year, status: "pending" });
+            renderOpenSubjects();
+          }
+        });
+      });
+    }
+    renderOpenSubjects();
     var gradeRows = "";
     var totalUnits = 0, gradeSum = 0, gradeCount = 0;
     enrolls.forEach(function (e) {

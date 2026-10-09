@@ -40,6 +40,18 @@
       </div>
 
       <div class="card section-card">
+        <h3>Find a Student's Pending Payments</h3>
+        <div class="field">
+          <label for="studentSearch">Student name or student number</label>
+          <input id="studentSearch" type="search" placeholder="Search student name or number">
+        </div>
+        <table>
+          <thead><tr><th>Student</th><th>Student No.</th><th>Pending Item</th><th>Amount</th><th>Action</th></tr></thead>
+          <tbody id="searchPaymentsBody"><tr><td colspan="5" class="hint">Enter a student name or number to search.</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="card section-card">
         <h3>Payment Records</h3>
         <table>
           <thead><tr><th>Student</th><th>Description</th><th>Amount</th><th>Receipt No.</th><th>Date Paid</th><th>Status</th><th>Action</th></tr></thead>
@@ -64,6 +76,44 @@
     return st ? st.full_name : id;
   }
 
+  function processPayment(id) {
+    var d = SSIS.db();
+    var payment = SSIS.byId(d.payments, "payment_id", id);
+    if (!payment || payment.status === "paid") return;
+    payment.status = "paid";
+    payment.date_paid = new Date().toISOString().slice(0, 10);
+    payment.receipt_no = "OR-2026-" + String(Math.floor(Math.random() * 9000) + 1000);
+    SSIS.save(d);
+    SSIS.log(s.username, "Processed payment #" + id + " (" + payment.receipt_no + ")");
+    render();
+    renderSearch();
+  }
+
+  function renderSearch() {
+    var query = document.getElementById("studentSearch").value.trim().toLowerCase();
+    var body = document.getElementById("searchPaymentsBody");
+    if (!query) {
+      body.innerHTML = '<tr><td colspan="5" class="hint">Enter a student name or number to search.</td></tr>';
+      return;
+    }
+    var d = SSIS.db();
+    var matches = d.payments.filter(function (payment) {
+      if (payment.status === "paid") return false;
+      var student = SSIS.byId(d.students, "student_id", payment.student_id);
+      var name = student ? student.full_name : "";
+      return name.toLowerCase().indexOf(query) !== -1 || String(payment.student_id).toLowerCase().indexOf(query) !== -1;
+    });
+    body.innerHTML = matches.map(function (payment) {
+      var student = SSIS.byId(d.students, "student_id", payment.student_id);
+      return '<tr><td>' + SSIS.esc(student ? student.full_name : "Unknown student") + '</td><td>' +
+        SSIS.esc(payment.student_id) + '</td><td>' + SSIS.esc(payment.description) + '</td><td>' +
+        SSIS.money(payment.amount) + '</td><td><button class="btn small success" data-search-pay="' + payment.payment_id + '">Process</button></td></tr>';
+    }).join("") || '<tr><td colspan="5" class="hint">No pending payments found for that student.</td></tr>';
+    document.querySelectorAll("[data-search-pay]").forEach(function (button) {
+      button.addEventListener("click", function () { processPayment(button.getAttribute("data-search-pay")); });
+    });
+  }
+
   function render() {
     var d = SSIS.db();
     var rows = d.payments.map(function (p) {
@@ -83,20 +133,13 @@
 
     document.querySelectorAll("[data-pay]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        var id = btn.getAttribute("data-pay");
-        var d = SSIS.db();
-        var p = SSIS.byId(d.payments, "payment_id", id);
-        p.status = "paid";
-        p.date_paid = new Date().toISOString().slice(0, 10);
-        p.receipt_no = "OR-2026-" + String(Math.floor(Math.random() * 9000) + 1000);
-        SSIS.save(d);
-        SSIS.log(s.username, "Processed payment #" + id + " (" + p.receipt_no + ")");
-        render();
+        processPayment(btn.getAttribute("data-pay"));
       });
     });
   }
 
-  if (s) render();
+  document.getElementById("studentSearch").addEventListener("input", renderSearch);
+  if (s) { render(); renderSearch(); }
   document.getElementById("logout").addEventListener("click", function (e) { e.preventDefault(); SSIS.logout(); });
 </script>
 </body>

@@ -36,6 +36,37 @@
       <div id="alert" class="alert ok"></div>
 
       <div class="card section-card">
+        <h3>Student Accounts</h3>
+        <table>
+          <thead><tr><th>Student</th><th>Student No.</th><th>Username</th><th>Program</th><th>Year</th></tr></thead>
+          <tbody id="studentsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="card section-card" id="departmentPanel" hidden>
+        <h3>Open Subjects for Enrollment</h3>
+        <form id="offeringForm" class="inline-form">
+          <div class="field">
+            <label for="offeringCourse">Subject</label>
+            <select id="offeringCourse" required></select>
+          </div>
+          <div class="field">
+            <label for="offeringTerm">Term</label>
+            <select id="offeringTerm"><option>1st Semester</option><option>2nd Semester</option><option>Summer</option></select>
+          </div>
+          <div class="field">
+            <label for="offeringYear">School Year</label>
+            <input id="offeringYear" value="2026-2027" required>
+          </div>
+          <button type="submit" class="btn">Open Subject</button>
+        </form>
+        <table>
+          <thead><tr><th>Code</th><th>Subject</th><th>Units</th><th>Term</th><th>Status</th></tr></thead>
+          <tbody id="offeringsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="card section-card">
         <h3>Student Enrollments</h3>
         <table>
           <thead><tr><th>Student</th><th>Course</th><th>Term</th><th>Grade</th><th>Status</th><th>Action</th></tr></thead>
@@ -66,6 +97,31 @@
     var d = SSIS.db();
     var st = SSIS.byId(d.students, "student_id", id);
     return st ? st.full_name : id;
+  }
+
+  function renderStudents() {
+    var d = SSIS.db();
+    var rows = d.users.filter(function (user) { return user.role === "student"; }).map(function (user) {
+      var student = d.students.filter(function (item) { return String(item.user_id) === String(user.user_id); })[0];
+      return '<tr><td>' + SSIS.esc(user.name) + '</td><td>' + SSIS.esc(student ? student.student_id : "-") +
+        '</td><td>' + SSIS.esc(user.username) + '</td><td>' + SSIS.esc(student ? student.program : "-") +
+        '</td><td>' + SSIS.esc(student ? student.year_level : "-") + '</td></tr>';
+    }).join("");
+    document.getElementById("studentsBody").innerHTML = rows || '<tr><td colspan="5" class="hint">No student accounts.</td></tr>';
+  }
+
+  function renderOfferings() {
+    var d = SSIS.db();
+    document.getElementById("offeringCourse").innerHTML = d.courses.map(function (course) {
+      return '<option value="' + course.course_id + '">' + SSIS.esc(course.course_code + " - " + course.title) + '</option>';
+    }).join("");
+    var rows = d.course_offerings.filter(function (offering) { return offering.status === "open"; }).map(function (offering) {
+      var course = SSIS.byId(d.courses, "course_id", offering.course_id);
+      if (!course) return "";
+      return '<tr><td>' + SSIS.esc(course.course_code) + '</td><td>' + SSIS.esc(course.title) + '</td><td>' + course.units +
+        '</td><td>' + SSIS.esc(offering.term + " " + offering.school_year) + '</td><td>' + SSIS.badge("open") + '</td></tr>';
+    }).join("");
+    document.getElementById("offeringsBody").innerHTML = rows || '<tr><td colspan="5" class="hint">No subjects currently open.</td></tr>';
   }
 
   function renderEnrollments() {
@@ -128,7 +184,30 @@
     });
   }
 
-  if (s) { renderEnrollments(); renderDocs(); }
+  if (s) {
+    renderStudents();
+    renderEnrollments();
+    renderDocs();
+    if (s.role === "department") {
+      document.getElementById("departmentPanel").hidden = false;
+      renderOfferings();
+      document.getElementById("offeringForm").addEventListener("submit", function (e) {
+        e.preventDefault();
+        var result = SSIS.openCourseOffering({
+          courseId: document.getElementById("offeringCourse").value,
+          term: document.getElementById("offeringTerm").value,
+          schoolYear: document.getElementById("offeringYear").value.trim()
+        });
+        var alert = document.getElementById("alert");
+        alert.className = result.error ? "alert error show" : "alert ok show";
+        alert.textContent = result.error || "Subject is now open for student enrollment.";
+        if (!result.error) {
+          SSIS.log(s.username, "Opened course offering #" + result.offering_id);
+          renderOfferings();
+        }
+      });
+    }
+  }
   document.getElementById("logout").addEventListener("click", function (e) { e.preventDefault(); SSIS.logout(); });
 </script>
 </body>
