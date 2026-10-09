@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Dashboard - CuyoTech SSIS</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><img class="logo" src="assets/pnc-seal.png" alt="Pamantasan ng Cabuyao seal"><span>CuyoTech<br>SSIS</span></div>
+    <nav>
+      <a href="student-dashboard.html" class="active">Dashboard</a>
+      <a href="#profile">My Profile</a>
+      <a href="#grades">Grades</a>
+      <a href="#subjects">Subjects</a>
+      <a href="document-request.html">Document Request</a>
+      <a href="#clearance">Clearance</a>
+      <a href="#" id="logout">Logout</a>
+    </nav>
+    <div class="foot">Student Portal<br>&copy; 2026</div>
+  </aside>
+
+  <div class="content">
+    <div class="topbar">
+      <input class="search" placeholder="Search subjects, documents...">
+      <div class="user">
+        <div class="avatar" id="avatar">MS</div>
+        <div>
+          <div id="userName" style="font-weight:600;font-size:13px">Name</div>
+          <div class="hint" id="userRole">Student</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="main">
+      <h1 class="page-title">Welcome back, <span id="firstName">Student</span>!</h1>
+      <p class="page-sub">Here is an overview of your academic records for 1st Semester, A.Y. 2026-2027.</p>
+
+      <div class="grid cols-4">
+        <div class="card stat"><div class="label">GPA</div><div class="value" id="gpa">-</div></div>
+        <div class="card stat"><div class="label">Enrolled Units</div><div class="value" id="units">-</div></div>
+        <div class="card stat"><div class="label">Pending Requests</div><div class="value" id="pending">-</div></div>
+        <div class="card stat"><div class="label">Outstanding Balance</div><div class="value small" id="balance">-</div></div>
+      </div>
+
+      <div class="card section-card" id="profile">
+        <h3>My Profile</h3>
+        <table><tbody id="profileBody"></tbody></table>
+      </div>
+
+      <div class="card section-card">
+        <h3 id="grades">Grade Records</h3>
+        <table>
+          <thead><tr><th>Code</th><th>Course</th><th>Units</th><th>Term</th><th>Grade</th><th>Status</th></tr></thead>
+          <tbody id="gradesBody"></tbody>
+        </table>
+      </div>
+
+      <div class="card section-card" id="subjects">
+        <h3>Subject Catalog</h3>
+        <table>
+          <thead><tr><th>Code</th><th>Subject</th><th>Units</th><th>Department</th><th>Enrollment</th></tr></thead>
+          <tbody id="subjectsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="grid cols-2 mt">
+        <div class="card">
+          <h3 style="margin-top:0">Recent Document Requests</h3>
+          <table>
+            <thead><tr><th>Type</th><th>Date</th><th>Status</th></tr></thead>
+            <tbody id="requestsBody"></tbody>
+          </table>
+          <p class="mt"><a href="document-request.html">Go to Document Request &rarr;</a></p>
+        </div>
+        <div class="card" id="clearance">
+          <h3 style="margin-top:0">Clearance Status</h3>
+          <table>
+            <thead><tr><th>Office / Department</th><th>Status</th><th>Date Signed</th></tr></thead>
+            <tbody id="clearanceBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  var s = SSIS.requireRole(["student"]);
+  if (s) {
+    var d = SSIS.db();
+    var student = d.students.filter(function (x) { return x.user_id === s.user_id; })[0];
+    var sid = student ? student.student_id : null;
+
+    document.getElementById("userName").textContent = s.name;
+    document.getElementById("userRole").textContent = "Student";
+    document.getElementById("avatar").textContent = SSIS.initials(s.name);
+    document.getElementById("firstName").textContent = s.name.split(" ")[0];
+    document.getElementById("profileBody").innerHTML = [
+      ["Full Name", student ? student.full_name : s.name],
+      ["Student Number", student ? student.student_id : "Not available"],
+      ["Program", student ? student.program : "Not available"],
+      ["Year Level", student ? "Year " + student.year_level : "Not available"],
+      ["Email", student ? student.email : "Not available"]
+    ].map(function (row) {
+      return "<tr><th>" + SSIS.esc(row[0]) + "</th><td>" + SSIS.esc(row[1]) + "</td></tr>";
+    }).join("");
+
+    var enrolls = d.enrollments.filter(function (e) { return e.student_id === sid; });
+    var gradeRows = "";
+    var totalUnits = 0, gradeSum = 0, gradeCount = 0;
+    enrolls.forEach(function (e) {
+      var c = SSIS.byId(d.courses, "course_id", e.course_id);
+      if (!c) return;
+      totalUnits += c.units;
+      if (e.grade) { gradeSum += parseFloat(e.grade); gradeCount++; }
+      gradeRows += "<tr><td>" + SSIS.esc(c.course_code) + "</td><td>" + SSIS.esc(c.title) + "</td><td>" + c.units +
+        "</td><td>" + SSIS.esc(e.term + " " + e.school_year) + "</td><td>" + SSIS.esc(e.grade || "-") + "</td><td>" + SSIS.badge(SSIS.esc(e.status)) + "</td></tr>";
+    });
+    document.getElementById("gradesBody").innerHTML = gradeRows || '<tr><td colspan="6" class="hint">No grade records yet.</td></tr>';
+
+    var subjectRows = d.courses.map(function (course) {
+      var department = SSIS.byId(d.departments, "dept_id", course.dept_id);
+      var enrollment = enrolls.filter(function (item) { return String(item.course_id) === String(course.course_id); })[0];
+      return "<tr><td>" + SSIS.esc(course.course_code) + "</td><td>" + SSIS.esc(course.title) + "</td><td>" + course.units +
+        "</td><td>" + SSIS.esc(department ? department.dept_name : "-") + "</td><td>" + SSIS.badge(SSIS.esc(enrollment ? enrollment.status : "Not enrolled")) + "</td></tr>";
+    }).join("");
+    document.getElementById("subjectsBody").innerHTML = subjectRows || '<tr><td colspan="5" class="hint">No subjects available.</td></tr>';
+
+    document.getElementById("gpa").textContent = gradeCount ? (gradeSum / gradeCount).toFixed(2) : "N/A";
+    document.getElementById("units").textContent = totalUnits;
+
+    var pendingDocs = d.document_requests.filter(function (r) { return r.student_id === sid && r.status !== "released"; }).length;
+    document.getElementById("pending").textContent = pendingDocs;
+
+    var bal = d.payments.filter(function (p) { return p.student_id === sid && p.status === "unpaid"; })
+      .reduce(function (a, p) { return a + p.amount; }, 0);
+    document.getElementById("balance").textContent = SSIS.money(bal);
+
+    var reqRows = d.document_requests.filter(function (r) { return r.student_id === sid; }).slice(0, 4)
+      .map(function (r) {
+        return "<tr><td>" + r.doc_type + "</td><td>" + r.date_requested + "</td><td>" + SSIS.badge(r.status) + "</td></tr>";
+      }).join("");
+    document.getElementById("requestsBody").innerHTML = reqRows || '<tr><td colspan="3" class="hint">No requests yet.</td></tr>';
+
+    var clRows = d.clearances.filter(function (c) { return c.student_id === sid; })
+      .map(function (c) { return "<tr><td>" + SSIS.esc(c.dept) + "</td><td>" + SSIS.badge(SSIS.esc(c.status)) + "</td><td>" + SSIS.esc(c.date_signed || "-") + "</td></tr>"; }).join("");
+    document.getElementById("clearanceBody").innerHTML = clRows || '<tr><td colspan="3" class="hint">No record.</td></tr>';
+  }
+  document.getElementById("logout").addEventListener("click", function (e) { e.preventDefault(); SSIS.logout(); });
+</script>
+</body>
+</html>

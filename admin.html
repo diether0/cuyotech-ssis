@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Module - CuyoTech SSIS</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><img class="logo" src="assets/pnc-seal.png" alt="Pamantasan ng Cabuyao seal"><span>CuyoTech<br>SSIS</span></div>
+    <nav>
+      <a href="admin.html" class="active">User Accounts</a>
+      <a href="#logs">Audit Logs</a>
+      <a href="#" id="logout">Logout</a>
+    </nav>
+    <div class="foot">Admin Module<br>&copy; 2026</div>
+  </aside>
+
+  <div class="content">
+    <div class="topbar">
+      <div class="hint">System Administration</div>
+      <div class="user">
+        <div class="avatar" id="avatar">SA</div>
+        <div>
+          <div id="userName" style="font-weight:600;font-size:13px">Name</div>
+          <div class="hint">Admin</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="main">
+      <h1 class="page-title">User Account Management</h1>
+      <p class="page-sub">Create accounts, assign roles, and review system activity.</p>
+      <div id="alert" class="alert ok"></div>
+
+      <div class="grid cols-2">
+        <div class="card">
+          <h3 style="margin-top:0">Create Account</h3>
+          <form id="userForm">
+            <div class="field">
+              <label for="uName">Full Name</label>
+              <input id="uName" required placeholder="e.g. Juan Dela Cruz">
+            </div>
+            <div class="field">
+              <label for="uUser">Username</label>
+              <input id="uUser" required placeholder="e.g. juan.delacruz">
+            </div>
+            <div class="field">
+              <label for="uPass">Temporary Password</label>
+              <input id="uPass" required value="1234">
+            </div>
+            <div class="field">
+              <label for="uRole">Role</label>
+              <select id="uRole">
+                <option value="student">Student</option>
+                <option value="registrar">Registrar</option>
+                <option value="cashier">Cashier</option>
+                <option value="department">Department</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <button type="submit" class="btn">Create Account</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-top:0">Registered Users</h3>
+          <table>
+            <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Action</th></tr></thead>
+            <tbody id="usersBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card section-card" id="logs">
+        <h3>Audit Logs</h3>
+        <table>
+          <thead><tr><th>When</th><th>Actor</th><th>Action</th></tr></thead>
+          <tbody id="logsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  var s = SSIS.requireRole(["admin"]);
+  if (s) {
+    document.getElementById("userName").textContent = s.name;
+    document.getElementById("avatar").textContent = SSIS.initials(s.name);
+  }
+
+  function renderUsers() {
+    var d = SSIS.db();
+    document.getElementById("usersBody").innerHTML = d.users.map(function (u) {
+      return '<tr><td>' + SSIS.esc(u.name) + '</td><td>' + SSIS.esc(u.username) + '</td><td>' + SSIS.badge(u.role) +
+        '</td><td><button class="btn small danger" data-del="' + u.user_id + '">Remove</button></td></tr>';
+    }).join("");
+
+    document.querySelectorAll("[data-del]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.getAttribute("data-del");
+        if (id === String(s.user_id)) { alert("You cannot remove your own account."); return; }
+        var d = SSIS.db();
+        var u = SSIS.byId(d.users, "user_id", id);
+        d.users = d.users.filter(function (x) { return String(x.user_id) !== String(id); });
+        SSIS.save(d);
+        SSIS.log(s.username, "Removed account: " + (u ? u.username : id));
+        renderUsers();
+        renderLogs();
+      });
+    });
+  }
+
+  function renderLogs() {
+    var d = SSIS.db();
+    document.getElementById("logsBody").innerHTML = d.audit_logs.slice(0, 12).map(function (l) {
+      return '<tr><td>' + l.date + '</td><td>' + SSIS.esc(l.actor) + '</td><td>' + SSIS.esc(l.action) + '</td></tr>';
+    }).join("") || '<tr><td colspan="3" class="hint">No activity.</td></tr>';
+  }
+
+  document.getElementById("userForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var d = SSIS.db();
+    var username = document.getElementById("uUser").value.trim();
+    if (d.users.some(function (u) { return u.username === username; })) {
+      var a = document.getElementById("alert");
+      a.className = "alert error show";
+      a.textContent = "Username already exists.";
+      return;
+    }
+    d.users.push({
+      user_id: d.users.reduce(function (m, u) { return Math.max(m, u.user_id); }, 0) + 1,
+      username: username,
+      password: document.getElementById("uPass").value,
+      role: document.getElementById("uRole").value,
+      name: document.getElementById("uName").value.trim()
+    });
+    SSIS.save(d);
+    SSIS.log(s.username, "Created account: " + username);
+    var a2 = document.getElementById("alert");
+    a2.className = "alert ok show";
+    a2.textContent = "Account for " + username + " created.";
+    this.reset();
+    document.getElementById("uPass").value = "1234";
+    renderUsers();
+    renderLogs();
+  });
+
+  if (s) { renderUsers(); renderLogs(); }
+  document.getElementById("logout").addEventListener("click", function (e) { e.preventDefault(); SSIS.logout(); });
+</script>
+</body>
+</html>

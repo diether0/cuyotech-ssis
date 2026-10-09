@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login - CuyoTech SSIS</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="brand">
+      <img class="logo" src="assets/pnc-seal.png" alt="Pamantasan ng Cabuyao seal">
+      <h1>CuyoTech University</h1>
+      <p>Student Services Information System</p>
+    </div>
+
+    <div id="alert" class="alert error"></div>
+
+    <form id="loginForm" novalidate>
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" placeholder="Username" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Enter password" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn" style="width:100%">Login</button>
+      <p class="hint form-switch">New student? <button type="button" class="text-button" id="showRegister">Create an account</button></p>
+    </form>
+
+    <form id="registerForm" class="register-form" hidden novalidate>
+      <div class="register-fields">
+        <div class="field">
+          <label for="regFullName">Full Name</label>
+          <input id="regFullName" autocomplete="name" required>
+        </div>
+        <div class="field">
+          <label for="regStudentId">Student Number</label>
+          <input id="regStudentId" placeholder="e.g. 2026-00123" required>
+        </div>
+        <div class="field">
+          <label for="regEmail">School Email</label>
+          <input id="regEmail" type="email" autocomplete="email" required>
+        </div>
+        <div class="field">
+          <label for="regProgram">Program</label>
+          <input id="regProgram" placeholder="e.g. BS Computer Science" required>
+        </div>
+        <div class="field">
+          <label for="regYear">Year Level</label>
+          <select id="regYear" required>
+            <option value="">Select year</option>
+            <option value="1">Year 1</option>
+            <option value="2">Year 2</option>
+            <option value="3">Year 3</option>
+            <option value="4">Year 4</option>
+            <option value="5">Year 5</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="regUsername">Username</label>
+          <input id="regUsername" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="regPassword">Password</label>
+          <input id="regPassword" type="password" autocomplete="new-password" minlength="8" required>
+        </div>
+        <div class="field">
+          <label for="regConfirmPassword">Confirm Password</label>
+          <input id="regConfirmPassword" type="password" autocomplete="new-password" minlength="8" required>
+        </div>
+      </div>
+      <button type="submit" class="btn" style="width:100%">Create Student Account</button>
+      <p class="hint form-switch">Already registered? <button type="button" class="text-button" id="showLogin">Back to login</button></p>
+    </form>
+
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  document.getElementById("loginForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var u = document.getElementById("username").value.trim();
+    var p = document.getElementById("password").value;
+    var alertBox = document.getElementById("alert");
+    if (!u || !p) {
+      alertBox.textContent = "Please enter both username and password.";
+      alertBox.classList.add("show");
+      return;
+    }
+    var user = SSIS.login(u, p);
+    if (!user) {
+      alertBox.textContent = "Invalid username or password. Please try again.";
+      alertBox.classList.add("show");
+      return;
+    }
+    window.location.href = SSIS.homeFor(user.role);
+  });
+
+  var loginForm = document.getElementById("loginForm");
+  var registerForm = document.getElementById("registerForm");
+  var alertBox = document.getElementById("alert");
+  document.getElementById("showRegister").addEventListener("click", function () {
+    loginForm.hidden = true;
+    registerForm.hidden = false;
+    alertBox.classList.remove("show");
+  });
+  document.getElementById("showLogin").addEventListener("click", function () {
+    registerForm.hidden = true;
+    loginForm.hidden = false;
+    alertBox.classList.remove("show");
+  });
+  registerForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (!registerForm.reportValidity()) return;
+    var password = document.getElementById("regPassword").value;
+    if (password !== document.getElementById("regConfirmPassword").value) {
+      alertBox.className = "alert error show";
+      alertBox.textContent = "Passwords do not match.";
+      return;
+    }
+    var user = SSIS.registerStudent({
+      fullName: document.getElementById("regFullName").value,
+      studentId: document.getElementById("regStudentId").value,
+      email: document.getElementById("regEmail").value,
+      program: document.getElementById("regProgram").value,
+      yearLevel: document.getElementById("regYear").value,
+      username: document.getElementById("regUsername").value,
+      password: password
+    });
+    if (user.error) {
+      alertBox.className = "alert error show";
+      alertBox.textContent = user.error;
+      return;
+    }
+    SSIS.login(user.username, password);
+    window.location.href = SSIS.homeFor(user.role);
+  });
+</script>
+</body>
+</html>

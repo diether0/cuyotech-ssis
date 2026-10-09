@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Document Request - CuyoTech SSIS</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><img class="logo" src="assets/pnc-seal.png" alt="Pamantasan ng Cabuyao seal"><span>CuyoTech<br>SSIS</span></div>
+    <nav>
+      <a href="student-dashboard.html">Dashboard</a>
+      <a href="student-dashboard.html#profile">My Profile</a>
+      <a href="student-dashboard.html#grades">Grades</a>
+      <a href="student-dashboard.html#subjects">Subjects</a>
+      <a href="document-request.html" class="active">Document Request</a>
+      <a href="student-dashboard.html#clearance">Clearance</a>
+      <a href="#" id="logout">Logout</a>
+    </nav>
+    <div class="foot">Student Portal<br>&copy; 2026</div>
+  </aside>
+
+  <div class="content">
+    <div class="topbar">
+      <div class="hint">Home &nbsp;/&nbsp; Document Request</div>
+      <div class="user">
+        <div class="avatar" id="avatar">MS</div>
+        <div>
+          <div id="userName" style="font-weight:600;font-size:13px">Name</div>
+          <div class="hint">Student</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="main">
+      <h1 class="page-title">Request a School Document</h1>
+      <p class="page-sub">Submit a request for your Transcript of Records, Certificate of Registration, or other certifications.</p>
+
+      <div id="alert" class="alert ok"></div>
+
+      <div class="grid cols-2">
+        <div class="card">
+          <h3 style="margin-top:0">New Request</h3>
+          <form id="requestForm">
+            <div class="field">
+              <label for="docType">Document Type</label>
+              <select id="docType" required>
+                <option value="">-- Select document --</option>
+                <option>Transcript of Records</option>
+                <option>Certificate of Registration (COR)</option>
+                <option>Certificate of Enrollment</option>
+                <option>Certificate of Good Moral Character</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="purpose">Purpose</label>
+              <textarea id="purpose" placeholder="e.g. Scholarship application" required></textarea>
+            </div>
+            <div class="field">
+              <label for="copies">Number of Copies</label>
+              <input type="number" id="copies" min="1" max="5" value="1" required>
+            </div>
+            <div class="btn-row">
+              <button type="submit" class="btn">Submit Request</button>
+              <button type="reset" class="btn secondary">Cancel</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-top:0">My Requests</h3>
+          <table>
+            <thead><tr><th>Ref #</th><th>Type</th><th>Copies</th><th>Date</th><th>Status</th></tr></thead>
+            <tbody id="requestsBody"></tbody>
+          </table>
+          <p class="hint mt">A document fee is automatically added to your assessment. Status updates when the Registrar releases the document.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  var s = SSIS.requireRole(["student"]);
+  var sid = null;
+  if (s) {
+    var d0 = SSIS.db();
+    var student = d0.students.filter(function (x) { return x.user_id === s.user_id; })[0];
+    sid = student ? student.student_id : null;
+    document.getElementById("userName").textContent = s.name;
+    document.getElementById("avatar").textContent = SSIS.initials(s.name);
+  }
+
+  function renderRequests() {
+    var d = SSIS.db();
+    var rows = d.document_requests.filter(function (r) { return r.student_id === sid; })
+      .sort(function (a, b) { return b.request_id - a.request_id; })
+      .map(function (r) {
+        return "<tr><td>#" + r.request_id + "</td><td>" + r.doc_type + "</td><td>" + r.copies +
+          "</td><td>" + r.date_requested + "</td><td>" + SSIS.badge(r.status) + "</td></tr>";
+      }).join("");
+    document.getElementById("requestsBody").innerHTML = rows || '<tr><td colspan="5" class="hint">No requests yet.</td></tr>';
+  }
+
+  document.getElementById("requestForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var docType = document.getElementById("docType").value;
+    var purpose = document.getElementById("purpose").value.trim();
+    var copies = parseInt(document.getElementById("copies").value, 10) || 1;
+    if (!docType || !purpose) return;
+
+    var d = SSIS.db();
+    var nextId = d.document_requests.reduce(function (m, r) { return Math.max(m, r.request_id); }, 1000) + 1;
+    d.document_requests.push({
+      request_id: nextId, student_id: sid, doc_type: docType, purpose: purpose,
+      copies: copies, status: "pending", date_requested: new Date().toISOString().slice(0, 10)
+    });
+    d.payments.push({
+      payment_id: d.payments.reduce(function (m, p) { return Math.max(m, p.payment_id); }, 5000) + 1,
+      student_id: sid, description: "Document Fee - " + docType, amount: 150.0 * copies,
+      receipt_no: "", date_paid: "", status: "unpaid"
+    });
+    SSIS.save(d);
+    SSIS.log(s.username, "Requested document: " + docType + " (#" + nextId + ")");
+
+    var a = document.getElementById("alert");
+    a.textContent = "Request #" + nextId + " submitted successfully. Please settle the document fee at the Cashier.";
+    a.classList.add("show");
+    this.reset();
+    renderRequests();
+  });
+
+  if (s) renderRequests();
+  document.getElementById("logout").addEventListener("click", function (e) { e.preventDefault(); SSIS.logout(); });
+</script>
+</body>
+</html>

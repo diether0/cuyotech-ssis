@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registrar Module - CuyoTech SSIS</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><img class="logo" src="assets/pnc-seal.png" alt="Pamantasan ng Cabuyao seal"><span>CuyoTech<br>SSIS</span></div>
+    <nav>
+      <a href="registrar.html" class="active">Enrollment &amp; Grades</a>
+      <a href="#documents">Document Requests</a>
+      <a href="#" id="logout">Logout</a>
+    </nav>
+    <div class="foot">Registrar Module<br>&copy; 2026</div>
+  </aside>
+
+  <div class="content">
+    <div class="topbar">
+      <div class="hint">Registrar Office</div>
+      <div class="user">
+        <div class="avatar" id="avatar">AJ</div>
+        <div>
+          <div id="userName" style="font-weight:600;font-size:13px">Name</div>
+          <div class="hint">Registrar</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="main">
+      <h1 class="page-title">Enrollment &amp; Grade Management</h1>
+      <p class="page-sub">Approve enrollments and encode final grades. Changes reflect immediately in the Student Portal.</p>
+      <div id="alert" class="alert ok"></div>
+
+      <div class="card section-card">
+        <h3>Student Enrollments</h3>
+        <table>
+          <thead><tr><th>Student</th><th>Course</th><th>Term</th><th>Grade</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody id="enrollBody"></tbody>
+        </table>
+      </div>
+
+      <div class="card section-card" id="documents">
+        <h3>Document Requests</h3>
+        <table>
+          <thead><tr><th>Ref #</th><th>Student</th><th>Type</th><th>Copies</th><th>Purpose</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody id="docsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  var s = SSIS.requireRole(["registrar", "department"]);
+  if (s) {
+    document.getElementById("userName").textContent = s.name;
+    document.getElementById("avatar").textContent = SSIS.initials(s.name);
+  }
+
+  function studentName(id) {
+    var d = SSIS.db();
+    var st = SSIS.byId(d.students, "student_id", id);
+    return st ? st.full_name : id;
+  }
+
+  function renderEnrollments() {
+    var d = SSIS.db();
+    var rows = d.enrollments.map(function (e) {
+      var c = SSIS.byId(d.courses, "course_id", e.course_id) || { course_code: "?", title: "" };
+      return '<tr>' +
+        '<td>' + studentName(e.student_id) + '</td>' +
+        '<td>' + c.course_code + ' - ' + c.title + '</td>' +
+        '<td>' + e.term + ' ' + e.school_year + '</td>' +
+        '<td><input data-enroll="' + e.enrollment_id + '" class="grade-input" style="width:70px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px" value="' + (e.grade || '') + '" placeholder="-"></td>' +
+        '<td>' + SSIS.badge(e.status) + '</td>' +
+        '<td><select data-status="' + e.enrollment_id + '" style="padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px">' +
+          ['pending', 'enrolled', 'rejected'].map(function (o) {
+            return '<option ' + (o === e.status ? 'selected' : '') + '>' + o + '</option>';
+          }).join('') + '</select> ' +
+        '<button class="btn small" data-save="' + e.enrollment_id + '">Save</button></td>' +
+        '</tr>';
+    }).join('');
+    document.getElementById("enrollBody").innerHTML = rows;
+
+    document.querySelectorAll("[data-save]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.getAttribute("data-save");
+        var d = SSIS.db();
+        var e = SSIS.byId(d.enrollments, "enrollment_id", id);
+        e.grade = document.querySelector('[data-enroll="' + id + '"]').value.trim();
+        e.status = document.querySelector('[data-status="' + id + '"]').value;
+        SSIS.save(d);
+        SSIS.log(s.username, "Updated enrollment #" + id);
+        var a = document.getElementById("alert");
+        a.textContent = "Enrollment #" + id + " updated.";
+        a.classList.add("show");
+        renderEnrollments();
+      });
+    });
+  }
+
+  function renderDocs() {
+    var d = SSIS.db();
+    var rows = d.document_requests.map(function (r) {
+      var action = r.status === "released"
+        ? '<span class="hint">Released</span>'
+        : '<button class="btn small success" data-release="' + r.request_id + '">Release</button>';
+      return '<tr><td>#' + r.request_id + '</td><td>' + studentName(r.student_id) + '</td><td>' + r.doc_type +
+        '</td><td>' + r.copies + '</td><td>' + SSIS.esc(r.purpose) + '</td><td>' + SSIS.badge(r.status) + '</td><td>' + action + '</td></tr>';
+    }).join('');
+    document.getElementById("docsBody").innerHTML = rows;
+
+    document.querySelectorAll("[data-release]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.getAttribute("data-release");
+        var d = SSIS.db();
+        var r = SSIS.byId(d.document_requests, "request_id", id);
+        r.status = "released";
+        SSIS.save(d);
+        SSIS.log(s.username, "Released document request #" + id);
+        renderDocs();
+      });
+    });
+  }
+
+  if (s) { renderEnrollments(); renderDocs(); }
+  document.getElementById("logout").addEventListener("click", function (e) { e.preventDefault(); SSIS.logout(); });
+</script>
+</body>
+</html>
