@@ -12,10 +12,10 @@ System (SSIS). No server or installation needed - it uses the browser's
 | Role        | Username        | Password |
 |-------------|-----------------|----------|
 | Student     | `maria.santos`  | `1234`   |
-| Registrar   | `reg.juarez`    | `1234`   |
-| Cashier     | `cash.delacruz` | `1234`   |
-| Department  | `dept.reyes`    | `1234`   |
-| Admin       | `admin.root`    | `1234`   |
+| Registrar   | `registrar`     | `1234`   |
+| Cashier     | `cashier`       | `1234`   |
+| Department  | `department`    | `1234`   |
+| Admin       | `admin`         | `1234`   |
 
 ## Modules / pages
 - `index.html` - Login (role-based redirect)
