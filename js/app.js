@@ -16,10 +16,10 @@
     ],
     users: [
       { user_id: 1, username: "maria.santos", password: "1234", role: "student", name: "Maria Santos" },
-      { user_id: 2, username: "registrar", password: "1234", role: "registrar", name: "Ana Juarez" },
-      { user_id: 3, username: "cashier", password: "1234", role: "cashier", name: "Ramon Dela Cruz" },
-      { user_id: 4, username: "department", password: "1234", role: "department", name: "Elena Reyes" },
-      { user_id: 5, username: "admin", password: "1234", role: "admin", name: "System Admin" }
+      { user_id: 2, username: "reg.juarez", password: "1234", role: "registrar", name: "Ana Juarez" },
+      { user_id: 3, username: "cash.delacruz", password: "1234", role: "cashier", name: "Ramon Dela Cruz" },
+      { user_id: 4, username: "dept.reyes", password: "1234", role: "department", name: "Elena Reyes" },
+      { user_id: 5, username: "admin.root", password: "1234", role: "admin", name: "System Admin" }
     ],
     students: [
       { student_id: "2024-00123", user_id: 1, full_name: "Maria Santos", program: "BS Computer Science", year_level: 3, email: "maria.santos@cuyotech.edu.ph" }
@@ -30,6 +30,10 @@
       { course_id: 3, dept_id: 1, course_code: "CS303", title: "Web Systems and Technologies", units: 3 },
       { course_id: 4, dept_id: 1, course_code: "GE201", title: "Ethics in Computing", units: 2 },
       { course_id: 5, dept_id: 1, course_code: "PE301", title: "Physical Education 3", units: 2 }
+    ],
+    course_offerings: [
+      { offering_id: 1, course_id: 4, term: "1st Semester", school_year: "2026-2027", status: "open" },
+      { offering_id: 2, course_id: 5, term: "1st Semester", school_year: "2026-2027", status: "open" }
     ],
     enrollments: [
       { enrollment_id: 1, student_id: "2024-00123", course_id: 1, term: "1st Semester", school_year: "2026-2027", grade: "1.75", status: "enrolled" },
@@ -51,36 +55,30 @@
       { clearance_id: 3, student_id: "2024-00123", dept: "College of Business", status: "cleared", date_signed: "2026-05-29" }
     ],
     audit_logs: [
-      { id: 1, actor: "admin", action: "Created user account: cashier", date: "2026-08-01 09:12" },
-      { id: 2, actor: "registrar", action: "Encoded grades for CS301", date: "2026-09-30 14:40" }
+      { id: 1, actor: "admin.root", action: "Created user account: cash.delacruz", date: "2026-08-01 09:12" },
+      { id: 2, actor: "reg.juarez", action: "Encoded grades for CS301", date: "2026-09-30 14:40" }
     ]
   };
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
-  function migrateDemoUsernames(data) {
-    var renames = {
-      "reg.juarez": "registrar",
-      "cash.delacruz": "cashier",
-      "dept.reyes": "department",
-      "admin.root": "admin"
-    };
+  function normalizeData(data) {
     var changed = false;
-    Object.keys(renames).forEach(function (oldName) {
-      var user = data.users.filter(function (item) { return item.username === oldName; })[0];
-      var newName = renames[oldName];
-      if (user && !data.users.some(function (item) { return item.username === newName; })) {
-        user.username = newName;
-        changed = true;
-        data.audit_logs.forEach(function (log) {
-          if (log.actor === oldName) log.actor = newName;
-          log.action = log.action.replace(oldName, newName);
+    if (!Array.isArray(data.course_offerings)) {
+      data.course_offerings = clone(SEED.course_offerings);
+      changed = true;
+    }
+    data.users.filter(function (user) { return user.role === "student"; }).forEach(function (user) {
+      if (!data.students.some(function (student) { return String(student.user_id) === String(user.user_id); })) {
+        data.students.push({
+          student_id: "TEMP-" + String(user.user_id).padStart(5, "0"),
+          user_id: user.user_id,
+          full_name: user.name,
+          program: "Not assigned",
+          year_level: 1,
+          email: ""
         });
-        var currentSession = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
-        if (currentSession && currentSession.user_id === user.user_id) {
-          currentSession.username = newName;
-          localStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
-        }
+        changed = true;
       }
     });
     return changed;
@@ -91,7 +89,7 @@
     if (!raw) { localStorage.setItem(DB_KEY, JSON.stringify(SEED)); return clone(SEED); }
     try {
       var data = JSON.parse(raw);
-      if (migrateDemoUsernames(data)) save(data);
+      if (normalizeData(data)) save(data);
       return data;
     } catch (e) { localStorage.setItem(DB_KEY, JSON.stringify(SEED)); return clone(SEED); }
   }
@@ -133,6 +131,41 @@
     save(d);
     addLog(username, "Created student account");
     return user;
+  }
+  function openCourseOffering(details) {
+    var data = db();
+    var course = byId(data.courses, "course_id", details.courseId);
+    if (!course) return { error: "Select a valid subject." };
+    var existing = data.course_offerings.some(function (offering) {
+      return String(offering.course_id) === String(details.courseId) &&
+        offering.term === details.term && offering.school_year === details.schoolYear &&
+        offering.status === "open";
+    });
+    if (existing) return { error: "That subject is already open for this term." };
+    var nextId = data.course_offerings.reduce(function (max, offering) { return Math.max(max, offering.offering_id); }, 0) + 1;
+    var offering = {
+      offering_id: nextId, course_id: course.course_id,
+      term: details.term, school_year: details.schoolYear, status: "open"
+    };
+    data.course_offerings.push(offering);
+    save(data);
+    return offering;
+  }
+  function enrollInOffering(studentId, offeringId) {
+    var data = db();
+    var offering = byId(data.course_offerings, "offering_id", offeringId);
+    if (!offering || offering.status !== "open") return { error: "This subject is not open for enrollment." };
+    if (data.enrollments.some(function (item) {
+      return String(item.student_id) === String(studentId) && String(item.course_id) === String(offering.course_id) &&
+        item.term === offering.term && item.school_year === offering.school_year && item.status !== "rejected";
+    })) return { error: "You are already enrolled or have a pending request for this subject." };
+    var nextId = data.enrollments.reduce(function (max, item) { return Math.max(max, item.enrollment_id); }, 0) + 1;
+    data.enrollments.push({
+      enrollment_id: nextId, student_id: studentId, course_id: offering.course_id,
+      term: offering.term, school_year: offering.school_year, grade: null, status: "pending"
+    });
+    save(data);
+    return { enrollment_id: nextId };
   }
   function session() {
     var raw = localStorage.getItem(SESSION_KEY);
@@ -185,6 +218,7 @@
 
   window.SSIS = {
     db: db, save: save, reset: reset, login: login, registerStudent: registerStudent, session: session, logout: logout,
+    openCourseOffering: openCourseOffering, enrollInOffering: enrollInOffering,
     requireRole: requireRole, homeFor: homeFor, log: log, money: money, badge: badge,
     byId: byId, esc: esc, initials: initials, SEED: SEED
   };
