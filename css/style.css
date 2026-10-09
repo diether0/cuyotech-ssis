@@ -163,6 +163,8 @@ tbody tr:hover td { background: #f8faf8; }
   outline: 3px solid rgba(38, 115, 93, .16); border-color: var(--blue-light);
 }
 .field textarea { min-height: 90px; resize: vertical; }
+.inline-form { display: grid; grid-template-columns: minmax(180px, 2fr) minmax(140px, 1fr) minmax(140px, 1fr) auto; align-items: end; gap: 12px; }
+.inline-form .field { margin-bottom: 14px; }
 .btn {
   display: inline-block; border: none; border-radius: 5px; padding: 10px 18px;
   background: var(--blue-light); color: #fff; font-size: 13px; font-weight: 700; cursor: pointer;
@@ -218,6 +220,7 @@ tbody tr:hover td { background: #f8faf8; }
   .login-card #alert { margin: 22px 24px 0; }
   .login-card form { padding: 24px 24px 0; }
   .register-fields { grid-template-columns: 1fr; }
+  .inline-form { grid-template-columns: 1fr; gap: 0; }
   .btn-row { flex-wrap: wrap; }
 }
 
